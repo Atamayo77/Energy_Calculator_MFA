@@ -18,16 +18,15 @@ class BuildingConfig:
     other_percent: float = 0.10
     current_led_percentage: float = 0.70
     new_building_efficiency_factor: float = 0.85
-    fan_percent_of_hvac: float = 0.25
 
 
 @dataclass
 class InterventionConfig:
     """Configuration for intervention parameters"""
     hvac_rightsizing_factor: float = 0.30
-    humidity_control_factor: float = 0.10
-    vfd_factor: float = 0.40
-    led_conversion_factor: float = 0.70
+    humidity_control_factor: float = 0.165
+    GSHP_factor: float = 0.44
+    led_conversion_factor: float = 0.75
     window_upgrade_factor: float = 0.10
 
 
@@ -76,13 +75,13 @@ class MFAEnergySavingsTool:
         self.old_building_hvac = self.old_building_energy * self.config.hvac_percent
         self.old_building_lighting = self.old_building_energy * self.config.lighting_percent
         self.old_building_other = self.old_building_energy * self.config.other_percent
-        self.old_building_fan = self.old_building_hvac * self.config.fan_percent_of_hvac
+        self.old_building_fan = self.old_building_hvac
 
         # New building breakdown
         self.new_building_hvac = self.new_building_energy * self.config.hvac_percent
         self.new_building_lighting = self.new_building_energy * self.config.lighting_percent
         self.new_building_other = self.new_building_energy * self.config.other_percent
-        self.new_building_fan = self.new_building_hvac * self.config.fan_percent_of_hvac
+        self.new_building_fan = self.new_building_hvac
 
         # Total breakdown
         self.total_hvac = self.old_building_hvac + self.new_building_hvac
@@ -118,14 +117,14 @@ class MFAEnergySavingsTool:
         savings = {
             'hvac_rightsizing': self._calculate_hvac_rightsizing_savings(interventions),
             'humidity_control': self._calculate_humidity_control_savings(interventions),
-            'vfd': self._calculate_vfd_savings(interventions),
+            'GSHP': self._calculate_GSHP_savings(interventions),
             'led_conversion': self._calculate_led_conversion_savings(interventions),
             'window_upgrades': self._calculate_window_upgrade_savings(interventions)
         }
 
         # Calculate total savings with interaction adjustments
         hvac_savings = sum(savings[measure] for measure in ['hvac_rightsizing', 'humidity_control',
-                                                            'vfd', 'window_upgrades'])
+                                                            'GSHP', 'window_upgrades'])
         lighting_savings = savings['led_conversion']
 
         # Cap HVAC savings at 95% of total HVAC energy
@@ -168,16 +167,16 @@ class MFAEnergySavingsTool:
         return (self.old_building_hvac * self.interventions_config.humidity_control_factor * old_impl +
                 self.new_building_hvac * self.interventions_config.humidity_control_factor * new_impl)
 
-    def _calculate_vfd_savings(self, interventions: Dict) -> float:
-        """Calculate savings from VFD implementation"""
-        if 'vfd' not in interventions:
+    def _calculate_GSHP_savings(self, interventions: Dict) -> float:
+        """Calculate savings from GSHP implementation"""
+        if 'GSHP' not in interventions:
             return 0
 
-        old_impl = interventions['vfd'].get('old', 0) / 100.0
-        new_impl = interventions['vfd'].get('new', 0) / 100.0
+        old_impl = interventions['GSHP'].get('old', 0) / 100.0
+        new_impl = interventions['GSHP'].get('new', 0) / 100.0
 
-        return (self.old_building_fan * self.interventions_config.vfd_factor * old_impl +
-                self.new_building_fan * self.interventions_config.vfd_factor * new_impl)
+        return (self.old_building_fan * self.interventions_config.GSHP_factor * old_impl +
+                self.new_building_fan * self.interventions_config.GSHP_factor * new_impl)
 
     def _calculate_led_conversion_savings(self, interventions: Dict) -> float:
         """Calculate savings from LED conversion"""
@@ -210,20 +209,20 @@ class MFAEnergySavingsTool:
         """Estimate costs, savings, and payback period for interventions"""
         # Implementation costs (per sq ft)
         implementation_costs = {
-            'hvac_rightsizing': {'old': 15.00, 'new': 10.00},
-            'humidity_control': {'old': 5.00, 'new': 3.00},
-            'vfd': {'old': 2.00, 'new': 1.50},
-            'led_conversion': {'old': 8.00, 'new': 8.00},
-            'window_upgrades': {'old': 25.00, 'new': 10.00}
+            'hvac_rightsizing': {'old': 30.00, 'new': 30.00},
+            'humidity_control': {'old': 2.00, 'new': 2.00},
+            'GSHP': {'old': 45.00, 'new': 45.00},
+            'led_conversion': {'old': 4.00, 'new': 4.00},
+            'window_upgrades': {'old': 3.50, 'new': 3.30}
         }
 
         # Energy source splits for each measure
         elec_gas_split = {
             'hvac_rightsizing': {'elec': 0.40, 'gas': 0.60},
-            'humidity_control': {'elec': 0.30, 'gas': 0.70},
-            'vfd': {'elec': 1.0, 'gas': 0.0},
+            'humidity_control': {'elec': 0.40, 'gas': 0.60},
+            'GSHP': {'elec': 1.0, 'gas': 0.0},
             'led_conversion': {'elec': 1.0, 'gas': 0.0},
-            'window_upgrades': {'elec': 0.25, 'gas': 0.75}
+            'window_upgrades': {'elec': 0.40, 'gas': 0.60}
         }
 
         # Calculate energy and cost savings
@@ -319,7 +318,7 @@ def create_intervention_controls(mfa_tool: MFAEnergySavingsTool) -> Dict:
     interventions = {}
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "HVAC Optimization", "Humidity/Temperature Control", "VFDs", "LED Lighting", "Window Upgrades"
+        "HVAC Optimization", "Humidity/Temperature Control", "GSHPs", "LED Lighting", "Window Upgrades"
     ])
 
     # HVAC Rightsizing
@@ -327,7 +326,7 @@ def create_intervention_controls(mfa_tool: MFAEnergySavingsTool) -> Dict:
         st.write("""
                 **HVAC System Optimization**
 
-                Current system: Running at 100% capacity with poor humidity control.
+                Current system: Low efficiency with poor humidity control.
 
                 Intervention: Replace with properly sized, high-efficiency equipment.
 
@@ -335,6 +334,7 @@ def create_intervention_controls(mfa_tool: MFAEnergySavingsTool) -> Dict:
                 """)
         use_hvac = st.checkbox("Implement HVAC Optimization", value=True, key="use_hvac")
         if use_hvac:
+            st.info(f"Note: More detailed HVAC system specifications and sizing data are needed for accurate effectiveness estimates")
             col1, col2 = st.columns(2)
             with col1:
                 old_impl = st.slider("Old Building %", 0, 100, 75, key="hvac_old")
@@ -345,13 +345,13 @@ def create_intervention_controls(mfa_tool: MFAEnergySavingsTool) -> Dict:
     # Humidity Control
     with tab2:
         st.write("""
-                **Advanced Humidity Control**
+                **Humidity/Temperature Setpoints Control**
 
-                Current situation: Wide RH variations, especially in old building.
+                Current situation: T: 68-72 F. RH: 45-55%. (Wide variations, especially in old building)
 
-                Intervention: Dedicated humidity/temperature systems with advanced controls.
+                Intervention: Change setpoints - T: 61-77 F. RH: 40-60% (Bizot Green Protocol)
 
-                Expected Savings: 10% of HVAC energy use in areas where implemented.
+                Expected Savings: 16.5% of HVAC energy use in areas where implemented.
                 """)
         use_humidity = st.checkbox("Implement Humidity Control", value=True, key="use_humidity")
         if use_humidity:
@@ -362,25 +362,25 @@ def create_intervention_controls(mfa_tool: MFAEnergySavingsTool) -> Dict:
                 new_impl = st.slider("New Building %", 0, 100, 50, key="humidity_new")
             interventions['humidity_control'] = {'old': old_impl, 'new': new_impl}
 
-    # VFDs
+    # GSHPs
     with tab3:
         st.write("""
-                **Variable Frequency Drives (VFDs)**
+                **Ground Source Heat Pumps (GSHPs)**
 
-                Current fan operation: 100% capacity.
+                Current situation: VAV, water chillers, full humidity control, boilers.
 
-                Intervention: Add VFDs to modulate fan speed.
+                Intervention: Change to a GSHP system
 
-                Expected Savings: 40% of fan energy use (25% of HVAC) in areas where implemented.
+                Expected Savings: 44% of HVAC energy use in areas where implemented.
                 """)
-        use_vfd = st.checkbox("Implement VFDs", value=True, key="use_vfd")
-        if use_vfd:
+        use_GSHP = st.checkbox("Implement GSHPs", value=True, key="use_GSHP")
+        if use_GSHP:
             col1, col2 = st.columns(2)
             with col1:
-                old_impl = st.slider("Old Building %", 0, 100, 80, key="vfd_old")
+                old_impl = st.slider("Old Building %", 0, 100, 0, key="GSHP_old")
             with col2:
-                new_impl = st.slider("New Building %", 0, 100, 40, key="vfd_new")
-            interventions['vfd'] = {'old': old_impl, 'new': new_impl}
+                new_impl = st.slider("New Building %", 0, 100, 0, key="GSHP_new")
+            interventions['GSHP'] = {'old': old_impl, 'new': new_impl}
 
     # LED Lighting
     with tab4:
@@ -391,7 +391,7 @@ def create_intervention_controls(mfa_tool: MFAEnergySavingsTool) -> Dict:
 
                 Intervention: Museum-grade LED conversion.
 
-                Expected Savings: 70% of lighting energy use in areas where implemented.
+                Expected Savings: 75% of lighting energy use in areas where implemented.
                 """)
         use_led = st.checkbox("Implement LED Lighting", value=True, key="use_led")
         if use_led:
@@ -408,11 +408,11 @@ def create_intervention_controls(mfa_tool: MFAEnergySavingsTool) -> Dict:
         st.write("""
                 **Window Upgrades**
 
-                Current: Likely older, less efficient windows.
+                Current: Single glaze windows (old building)
 
-                Intervention: High-performance glazing or secondary glazing.
+                Intervention: Triple pane glazing with low-E coating and argon.
 
-                Expected Savings: 10% of HVAC energy use in areas where implemented.
+                Expected Savings: 5% of HVAC energy use in areas where implemented.
                 """)
         use_windows = st.checkbox("Implement Window Upgrades", value=True, key="use_windows")
         if use_windows:
@@ -453,7 +453,7 @@ def display_results(mfa_tool: MFAEnergySavingsTool, savings_results: Dict, finan
     measure_names = {
         'hvac_rightsizing': 'HVAC Optimization',
         'humidity_control': 'Humidity/Temperature Control',
-        'vfd': 'VFDs',
+        'GSHP': 'GSHPs',
         'led_conversion': 'LED Lighting',
         'window_upgrades': 'Window Upgrades'
     }
@@ -470,6 +470,7 @@ def display_results(mfa_tool: MFAEnergySavingsTool, savings_results: Dict, finan
     for key, name in measure_names.items():
         savings = savings_results['Individual Savings (kBtu/year)'][key]
         percent = (savings / mfa_tool.config.total_site_energy) * 100
+
         savings_data.append({
             'Measure': name,
             'Energy Savings': f"{savings:,.0f} kBtu/year",
@@ -508,14 +509,13 @@ def display_results(mfa_tool: MFAEnergySavingsTool, savings_results: Dict, finan
     - HVAC represents **85%** of total energy use  
     - Lighting represents **5%** of total energy use  
     - Other systems (plug loads, etc.) represent **10%**  
-    - Fan energy is estimated at **25% of HVAC energy**  
 
     **Intervention Savings Factors:**
     - **HVAC System Optimization:** 30% savings on HVAC energy where implemented  
-    - **Humidity/Temperature Control:** 10% savings on HVAC energy where implemented  
-    - **VFDs on Fans:** 40% savings on fan energy where implemented  
-    - **LED Lighting:** 70% savings on remaining non-LED lighting  
-    - **Window Upgrades:** 10% savings on HVAC energy where implemented  
+    - **Humidity/Temperature Control:** 16.5% savings on HVAC energy where implemented  
+    - **GSHPs:** 40% savings on fan energy where implemented  
+    - **LED Lighting:** 75% savings on remaining non-LED lighting  
+    - **Window Upgrades:** 5% savings on HVAC energy where implemented  
 
     **Cost & Emissions Assumptions:**
     - Electricity rate: **\$0.305 per kWh**  
@@ -532,5 +532,3 @@ def display_results(mfa_tool: MFAEnergySavingsTool, savings_results: Dict, finan
 
 if __name__ == "__main__":
     create_streamlit_app()
-
-#Run this(Command Prompt): streamlit run C:\Users\Angy\OneDrive\Escritorio\Curso_Python\Lección_1\P1\MFA\Final_Model.py
